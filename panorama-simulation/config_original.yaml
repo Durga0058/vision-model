@@ -1,0 +1,78 @@
+# ============================================================================
+# Panorama RTSP Camera Simulator — configuration
+# ============================================================================
+# A virtual camera looks at a static panoramic image. The camera is mounted on
+# a simulated stepper motor that pans horizontally between angle limits. Moving
+# the motor pans the viewport across the panorama; the resulting view is encoded
+# and pushed to a MediaMTX server as an RTSP stream.
+
+panorama:
+  # Path to the source panoramic image (relative to this file or absolute).
+  image_path: "panorama-1.jpg"
+  # Honour the EXIF orientation tag when loading (this image is rotated 90°).
+  apply_exif_orientation: true
+  # The image is internally rescaled to this height (px) once at startup so that
+  # per-frame cropping/resizing stays cheap. Width is scaled proportionally.
+  working_height: 1080
+  # Total horizontal field of view the panorama image represents, in degrees.
+  # Used to map a motor angle to a horizontal pixel offset.
+  horizontal_fov_deg: 70.0
+
+camera:
+  # Output (encoded) stream resolution. Must be even numbers for H.264.
+  output_width: 1280
+  output_height: 720
+  fps: 25
+  # The camera viewport uses the full panorama height and a width derived from
+  # the output aspect ratio. The effective camera HFOV is reported at startup.
+  # Set 'invert_pan' true to flip which image side a positive angle reveals.
+  # TRUE matches the real firmware/tracker convention (positive angle = RIGHT, per
+  # monkey-detection-rtsp CLAUDE.md). With false the sim pans the OPPOSITE way to the
+  # tracker, so it chases targets off-frame ("moves away from the monkey").
+  invert_pan: true
+  # Draw a HUD overlay (angle, status, limit-switch state) onto the frames.
+  overlay: true
+
+motor:
+  # Limit-switch positions (degrees). The motor travels between -limit and +limit.
+  # 0 deg = midpoint. Positive angle = LEFT rotation, negative = RIGHT (per protocol).
+  angle_limit_deg: 60.0
+  # Steps per output-shaft degree (used by CM_STEP / step accounting).
+  steps_per_degree: 35.5
+  # Maximum slew rate used when a move has no explicit duration (deg/sec).
+  max_speed_deg_per_sec: 60.0
+  # Internal motion update rate (Hz) for the simulated motion profile.
+  update_hz: 100
+  # Heartbeat watchdog: warn after this many seconds of silence; restart after
+  # 'watchdog_strikes' consecutive warnings.
+  watchdog_warn_sec: 20.0
+  watchdog_strikes: 3
+  # Calibration timing (simulated): time to seek each limit, and move-to-mid time.
+  calib_seek_sec: 1.0
+  calib_center_sec: 1.0
+
+control_server:
+  # TCP socket that stands in for the UART serial link. Commands are framed with
+  # ':EOM' exactly as the real firmware expects.
+  host: "127.0.0.1"
+  port: 8765
+
+rtsp:
+  # MediaMTX RTSP endpoint. The stream is published to <base_url>/<path>.
+  base_url: "rtsp://127.0.0.1:8554"
+  path: "cam"
+  transport: "tcp"            # tcp | udp (RTSP transport used by ffmpeg)
+  # H.264 encoder settings.
+  encoder: "libx264"
+  preset: "ultrafast"
+  tune: "zerolatency"
+  bitrate: "2M"
+  gop: 25                     # keyframe interval (frames)
+  # Optional: path to the mediamtx binary. If set and 'autostart' is true, the
+  # server launches mediamtx for you. Leave autostart false if it is already up.
+  mediamtx_binary: "/home/miko/Applications/mediamtx"
+  mediamtx_config: "/home/miko/Applications/mediamtx.yml"
+  autostart_mediamtx: false
+
+logging:
+  level: "INFO"              # DEBUG | INFO | WARNING | ERROR

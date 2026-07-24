@@ -1,0 +1,165 @@
+# ============================================================================
+# Panorama RTSP Camera Simulator — configuration
+# ============================================================================
+# A virtual camera looks at a static panoramic image. The camera is mounted on
+# a simulated stepper motor that pans horizontally between angle limits. Moving
+# the motor pans the viewport across the panorama; the resulting view is encoded
+# and pushed to a MediaMTX server as an RTSP stream.
+
+panorama:
+  # Path to the source panoramic image (relative to this file or absolute).
+  image_path: "panorama-1.jpg"
+  # Honour the EXIF orientation tag when loading (this image is rotated 90°).
+  apply_exif_orientation: true
+  # The image is internally rescaled to this height (px) once at startup so that
+  # per-frame cropping/resizing stays cheap. Width is scaled proportionally.
+  # Raised for the narrow 2K viewport so the crop supersamples (stays sharp).
+  working_height: 1440
+  # Total horizontal field of view the panorama image represents, in degrees.
+  # Used to map a motor angle to a horizontal pixel offset.
+  horizontal_fov_deg: 70.0
+
+camera:
+  # Output (encoded) stream resolution. Must be even numbers for H.264.
+  # 2304x1296 is the deployment camera's 2K resolution (16:9).
+  output_width: 2304
+  output_height: 1296
+  fps: 25
+  # Effective per-frame horizontal FOV of the camera, in degrees. The viewport
+  # crops exactly this many degrees (height from the output aspect, centered
+  # vertically) rather than using the full panorama height, so simulated frames
+  # match the real lens. A downstream tracker's camera_fov_deg MUST equal this.
+  # Leave blank/null for the legacy full-height viewport.
+  camera_fov_deg: 25.2
+  # The camera viewport uses the full panorama height and a width derived from
+  # the output aspect ratio. The effective camera HFOV is reported at startup.
+  # Set 'invert_pan' true to flip which image side a positive angle reveals.
+  # TRUE matches the real firmware/tracker convention (positive angle = RIGHT, per
+  # monkey-detection-rtsp CLAUDE.md). With false the sim pans the OPPOSITE way to the
+  # tracker, so it chases targets off-frame ("moves away from the monkey").
+  invert_pan: true
+  # Draw a HUD overlay (angle, status, limit-switch state) onto the frames.
+  overlay: true
+
+motor:
+  # Limit-switch positions (degrees). The motor travels between -limit and +limit.
+  # 0 deg = midpoint. Positive angle = LEFT rotation, negative = RIGHT (per protocol).
+  angle_limit_deg: 60.0
+  # Steps per output-shaft degree (used by CM_STEP / step accounting).
+  steps_per_degree: 35.5
+  # Maximum slew rate used when a move has no explicit duration (deg/sec).
+  max_speed_deg_per_sec: 60.0
+  # Internal motion update rate (Hz) for the simulated motion profile.
+  update_hz: 100
+  # Heartbeat watchdog: warn after this many seconds of silence; restart after
+  # 'watchdog_strikes' consecutive warnings.
+  watchdog_warn_sec: 20.0
+  watchdog_strikes: 3
+  # Calibration timing (simulated): time to seek each limit, and move-to-mid time.
+  # Raised so the startup calibration sweep is gentle (60° over 3s ≈ 20°/s) instead of
+  # the jarring 60°/s whip-around (seek 1s). Cosmetic for the sim; real firmware sets its own.
+  calib_seek_sec: 3.0
+  calib_center_sec: 2.0
+
+control_server:
+  # TCP socket that stands in for the UART serial link. Commands are framed with
+  # ':EOM' exactly as the real firmware expects.
+  host: "127.0.0.1"
+  port: 8765
+
+rtsp:
+  # MediaMTX RTSP endpoint. The stream is published to <base_url>/<path>.
+  base_url: "rtsp://127.0.0.1:8554"
+  path: "cam"
+  transport: "tcp"            # tcp | udp (RTSP transport used by ffmpeg)
+  # H.264 encoder settings.
+  encoder: "libx264"
+  preset: "ultrafast"
+  tune: "zerolatency"
+  bitrate: "2M"
+  gop: 25                     # keyframe interval (frames)
+  # Optional: path to the mediamtx binary. If set and 'autostart' is true, the
+  # server launches mediamtx for you. Leave autostart false if it is already up.
+  mediamtx_binary: "/home/miko/Applications/mediamtx"
+  mediamtx_config: "/home/miko/Applications/mediamtx.yml"
+  autostart_mediamtx: false
+
+logging:
+  level: "INFO"              # DEBUG | INFO | WARNING | ERROR
+
+# ============================================================================
+# VLA dataset generation (dataset_auto.py / dataset_manual.py / replay.py)
+# ============================================================================
+# Monkeys are composited onto 'base_image' and the same PanoramaCamera renders
+# the labeled frames. A monkey's placement angle IS the absolute pan angle that
+# centers it, so labels come straight from the geometry (no annotation).
+dataset:
+  output_dir: "datasets"           # where episode_XXXX/ dirs are written
+  base_image: "panorama-base.jpg"  # the virtual world
+  monkey_images_dir: "monkey-images"
+  # Supersampled so the narrow 25.2° crop upscaled to 2K stays sharp.
+  working_height: 2592
+
+  # Field of view the WHOLE base panorama spans. This sets pixels-per-degree and
+  # therefore how far ±angle_range maps across the image. It must be wide enough
+  # that a monkey at ±angle_range can be centered given the camera FOV, i.e.
+  # span >= 2*(angle_range + camera_fov/2). For angle_range=50 and camera FOV
+  # 25.2° that is >=125.2°; 140° leaves margin. (A warning is logged if too small.)
+  horizontal_fov_deg: 140.0
+
+  # Monkey placement (the task's -50°..+50° range; keep <= motor.angle_limit_deg).
+  angle_range_deg: 50.0
+  min_monkeys: 1
+  max_monkeys: 6                   # "up to 6 monkeys in an episode"
+  monkey_scale_min: 0.12           # monkey height as fraction of frame height
+  monkey_scale_max: 0.28
+  y_frac_min: 0.35                 # vertical band the monkeys sit in
+  y_frac_max: 0.70
+  # Horizontal arrangement: chance an episode clusters monkeys together (vs spread
+  # across the range), and how tight a cluster is. Gives "together / far / between".
+  cluster_prob: 0.5
+  cluster_spread_deg: 10.0
+
+  # Episode timing. At the slow pan speed below, a full search sweep can take
+  # ~20 s, so episodes are long enough to search, center, and then track a
+  # walking monkey.
+  fps: 25
+  episode_seconds: 20.0
+
+  # Camera pan-motor limits. The controller follows its target (search / center /
+  # track) at up to max_pan_speed_deg_per_sec, slew-limited by pan_accel; nothing
+  # ever moves faster. pan_gain sets how sharply it eases to a stop near the target.
+  # Each auto episode starts at a RANDOM camera angle (monkey already in the first
+  # frame / a small move away / a full opposite-direction sweep away).
+  max_pan_speed_deg_per_sec: 5.0
+  pan_accel_deg_per_sec2: 8.0
+  pan_gain: 2.0
+
+  # Monkey motion: each monkey rests rest_[min,max] seconds, then walks slowly at
+  # a constant speed in a random direction, bouncing within the angle range. The
+  # camera tracks the instructed monkey as it walks. animate_monkeys=false keeps
+  # them stationary.
+  animate_monkeys: true
+  rest_min_seconds: 5.0
+  rest_max_seconds: 10.0
+  walk_speed_min_deg_per_sec: 1.0
+  walk_speed_max_deg_per_sec: 3.0
+
+  # Language instructions sampled per auto episode (keywords left/right/large/small
+  # pick leftmost/rightmost/largest/smallest; anything else = closest-to-center).
+  instructions:
+    - "center the closest monkey"
+    - "track the one on the left"
+    - "track the one on the right"
+    - "center the largest monkey"
+
+  # Automatic generator.
+  num_episodes: 20
+  seed: 0
+
+  # Manual recorder. ←/→ step the setpoint (camera moves there and stops); ↑/↓
+  # change how fast that move runs (0 .. max_pan_speed_deg_per_sec).
+  manual_step_deg: 3.0                  # degrees the setpoint jumps per ←/→ press
+  manual_speed_init_deg_per_sec: 5.0    # move speed the session starts at
+  manual_speed_step_deg_per_sec: 0.5    # speed change per ↑/↓ press
+  manual_instruction: "center the closest monkey"

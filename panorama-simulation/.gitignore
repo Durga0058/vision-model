@@ -1,0 +1,6 @@
+*.kra
+__pycache__
+datasets
+panorama-old/
+panorama-base.jpg
+miko3-performance-cluster-2982bd39be89-stt.json

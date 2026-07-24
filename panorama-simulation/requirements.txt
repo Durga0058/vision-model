@@ -1,0 +1,8 @@
+PyYAML>=6.0
+numpy>=1.24
+Pillow>=10.0
+opencv-python>=4.8.0     # dataset tools: rendering, video I/O, manual/replay window
+matplotlib>=3.7          # plot_speed.py (pan-speed chart)
+posthog>=3.0.0
+aiohttp>=3.9.0
+sounddevice>=0.4.6

@@ -1,0 +1,9 @@
+simulation:
+  panoramas:
+    - "panorama-base1.jpg"
+    - "panorama-base2.jpg"
+    - "panorama-base3.jpg"
+    - "panorama-base4.jpg"
+  random_start: true
+  random_monkey: true
+  
