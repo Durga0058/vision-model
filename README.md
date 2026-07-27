@@ -134,3 +134,10 @@ When the simulation window pops up, click on the window and use the following ke
 
 * **Window Freeze / Not Responding:**
 Ensure focus is clicked on the image output window before pressing navigation keys (`W`, `A`, `S`, `D`, `Q`). To force terminate from terminal, press `Ctrl + C`.
+##  Synthetic Dataset Generation (VLA Pipeline)
+
+The simulator automatically generates training trajectories in the standard VLA dataset schema:
+
+### Running Dataset Generation
+```bash
+python3 dataset_manual.py
