@@ -104,7 +104,7 @@ target:
 
 ##  Execution Guide
 
-### Option A: Direct Python Execution
+###  Direct Python Execution
 
 ```bash
 python3 dataset_manual.py
