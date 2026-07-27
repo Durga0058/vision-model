@@ -1,95 +1,136 @@
-import os
 import cv2
-import random
 import numpy as np
+import yaml
+import json
+import time
+import os
 
-# =========================================================
-# 1. USE 4 DIFFERENT PANORAMA BASE IMAGES
-# =========================================================
-PANO_DIR = "panorama-simulation"
-PANO_FILES = [
-    os.path.join(PANO_DIR, "panorama-base1.jpg"),
-    os.path.join(PANO_DIR, "panorama-base2.jpg"),
-    os.path.join(PANO_DIR, "panorama-base3.jpg"),
-    os.path.join(PANO_DIR, "panorama-base4.jpg")
-]
+# 1. Output Directory Setup
+OUTPUT_DIR = "output"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Filter out only existing images
-available_panos = [f for f in PANO_FILES if os.path.exists(f)]
+JSONL_PATH = os.path.join(OUTPUT_DIR, "labels.jsonl")
+META_PATH = os.path.join(OUTPUT_DIR, "meta.json")
+VIDEO_PATH = os.path.join(OUTPUT_DIR, "video.mp4")
 
-if not available_panos:
-    # Fallback to single base image if renamed ones don't exist
-    fallback = os.path.join(PANO_DIR, "panorama-base.jpg")
-    if os.path.exists(fallback):
-        available_panos = [fallback]
-    else:
-        raise FileNotFoundError("Error: No panorama images found in panorama-simulation folder!")
+# Load Configuration
+with open("config.yaml", "r") as f:
+    config = yaml.safe_load(f)
 
-# Randomly select 1 panorama image on each run
-selected_pano = random.choice(available_panos)
-print(f"[SUCCESS] Selected Panorama: {selected_pano}")
+# Load Panorama Image
+panorama_path = config['simulation']['panoramas'][0]
+panorama = cv2.imread(panorama_path)
+if panorama is None:
+    # Fallback if path relative issue
+    panorama = cv2.imread("panorama-simulation/panorama-base1.jpg")
 
-bg_image = cv2.imread(selected_pano)
-img_h, img_w, _ = bg_image.shape
+H_b, W_b, _ = panorama.shape
+V_w = config['simulation']['viewport']['width']
+V_h = config['simulation']['viewport']['height']
+step_size = config['simulation']['controls']['step_size']
 
-# Viewport dimensions
-VIEW_W, VIEW_H = 600, 400
+# Random Starting Positions
+np.random.seed(int(time.time()))
+x = np.random.randint(0, W_b - V_w)
+y = np.random.randint(0, H_b - V_h)
 
-# =========================================================
-# 2. RANDOM STARTING POINT & RANDOM MONKEY PLACEMENT
-# =========================================================
-# Random Camera Starting Point (X, Y)
-curr_x = random.randint(0, max(0, img_w - VIEW_W))
-curr_y = random.randint(0, max(0, img_h - VIEW_H))
+# Random Monkey (Target) Spawn Position
+X_m = np.random.randint(50, W_b - 50)
+Y_m = np.random.randint(50, H_b - 50)
 
-# Random Monkey Placement Coordinates (X, Y)
-monkey_x = random.randint(50, max(50, img_w - 50))
-monkey_y = random.randint(50, max(50, img_h - 50))
+# Video Writer Setup
+fps = 30
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+video_writer = cv2.VideoWriter(VIDEO_PATH, fourcc, fps, (V_w, V_h))
 
-print(f"[INFO] Random Camera Start Viewport: ({curr_x}, {curr_y})")
-print(f"[INFO] Random Monkey Coordinates: ({monkey_x}, {monkey_y})")
+# Open JSONL File for writing
+jsonl_file = open(JSONL_PATH, "w")
 
-# =========================================================
-# 3. MANUAL CONTROL PART (W / A / S / D)
-# =========================================================
-step_size = 30
+frame_count = 0
+start_time = time.time()
+instruction_text = "track the monkey"
 
-print("\n--- CONTROLS ---")
-print("W: Move Up | S: Move Down | A: Move Left | D: Move Right")
-print("Q: Quit Simulation\n")
+print("🚀 Simulation Started! Use W, A, S, D to move, Q to quit & save dataset.")
 
 while True:
-    # Crop current view window
-    viewport = bg_image[curr_y:curr_y + VIEW_H, curr_x:curr_x + VIEW_W].copy()
-    
-    # Check if monkey is visible in current viewport
-    if curr_x <= monkey_x <= curr_x + VIEW_W and curr_y <= monkey_y <= curr_y + VIEW_H:
-        rel_m_x = monkey_x - curr_x
-        rel_m_y = monkey_y - curr_y
-        
-        # Render Monkey Marker (Red dot + Green Text)
-        cv2.circle(viewport, (rel_m_x, rel_m_y), 18, (0, 0, 255), -1)
-        cv2.putText(viewport, "MONKEY", (rel_m_x - 25, rel_m_y - 25), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+    # 1. Crop Viewport Canvas
+    viewport = panorama[y:y+V_h, x:x+V_w].copy()
 
-    # Render On-screen Controls Overlay
-    hud_info = f"Pos: ({curr_x}, {curr_y}) | Press W/A/S/D to move"
-    cv2.putText(viewport, hud_info, (10, 25), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+    # 2. Check if Monkey is Visible in Viewport
+    is_visible = (x <= X_m <= x + V_w) and (y <= Y_m <= y + V_h)
+    phase = "track" if is_visible else "search"
 
-    cv2.imshow("Panorama Simulation (Manual Control)", viewport)
+    if is_visible:
+        # Draw target marker on viewport
+        rel_x = X_m - x
+        rel_y = Y_m - y
+        cv2.circle(viewport, (rel_x, rel_y), 15, (0, 0, 255), -1)
+        cv2.putText(viewport, "MONKEY", (rel_x - 25, rel_y - 20),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+
+    # 3. Calculate Angles (Map X-coordinates to -180° to 180° panorama range)
+    current_angle = round(((x + V_w / 2) / W_b) * 360.0 - 180.0, 4)
+    target_angle = round((X_m / W_b) * 360.0 - 180.0, 4)
+    ideal_target_angle = target_angle
+
+    # 4. Display Info Overlay (HUD)
+    cv2.putText(viewport, f"Phase: {phase.upper()}", (10, 30), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+    # 5. Record Video Frame
+    video_writer.write(viewport)
+
+    # 6. Record Line in labels.jsonl
+    log_entry = {
+        "frame": frame_count,
+        "t": round(frame_count / fps, 2),
+        "current_angle": current_angle,
+        "target_angle": target_angle,
+        "monkey_count": 1,
+        "instruction": instruction_text,
+        "phase": phase,
+        "ideal_target_angle": ideal_target_angle
+    }
+    jsonl_file.write(json.dumps(log_entry) + "\n")
+
+    # Show Window
+    cv2.imshow("VLA Dataset Generator - Panorama", viewport)
     
+    frame_count += 1
+
+    # Key Controls
     key = cv2.waitKey(30) & 0xFF
     if key == ord('q'):
-        print("[INFO] Exiting simulation.")
         break
-    elif key == ord('w'): # Up
-        curr_y = max(0, curr_y - step_size)
-    elif key == ord('s'): # Down
-        curr_y = min(img_h - VIEW_H, curr_y + step_size)
-    elif key == ord('a'): # Left
-        curr_x = max(0, curr_x - step_size)
-    elif key == ord('d'): # Right
-        curr_x = min(img_w - VIEW_W, curr_x + step_size)
+    elif key == ord('w'):
+        y = max(0, y - step_size)
+    elif key == ord('s'):
+        y = min(H_b - V_h, y + step_size)
+    elif key == ord('a'):
+        x = max(0, x - step_size)
+    elif key == ord('d'):
+        x = min(W_b - V_w, x + step_size)
 
+# Cleanup & Metadata Generation
+jsonl_file.close()
+video_writer.release()
 cv2.destroyAllWindows()
+
+# Write meta.json
+duration = round(time.time() - start_time, 2)
+meta_data = {
+    "fps": fps,
+    "total_frames": frame_count,
+    "duration_seconds": duration,
+    "resolution": [V_w, V_h],
+    "instruction": instruction_text,
+    "created_at": "2026-07-27"
+}
+
+with open(META_PATH, "w") as mf:
+    json.dump(meta_data, mf, indent=2)
+
+print(f"\n✅ Dataset successfully generated in '{OUTPUT_DIR}/' folder!")
+print(f"📹 Saved: {VIDEO_PATH}")
+print(f"📄 Saved: {JSONL_PATH}")
+print(f"⚙️ Saved: {META_PATH}")
