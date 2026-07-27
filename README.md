@@ -18,28 +18,67 @@ This repository provides a modular simulation system for visual agent models. It
 
 ---
 
-##  Repository Structure
+##  Mathematical & Coordinate Logic
 
-```text
-vision-model/
-├── panorama-simulation/          # Core simulator assets and sub-modules
-│   ├── panorama-base1.jpg        # Base panorama scene 1
-│   ├── panorama-base2.jpg        # Base panorama scene 2
-│   ├── panorama-base3.jpg        # Base panorama scene 3
-│   └── panorama-base4.jpg        # Base panorama scene 4
-├── dataset_manual.py             # Main interactive execution script
-├── config.yaml                   # Simulation environment parameters
-├── run_simulator.sh              # One-click execution shell script
-├── requirements.txt              # Environment dependencies
-├── .gitignore                    # Git tracking exclusion rules
-├── LICENSE                       # Project license specification
-└── README.md                     # Project documentation
-## Mathematical & Coordinate LogicThe viewport crop matrix $V$ of dimension $W_v \times H_v$ at current camera center $(x, y)$ on a panorama base canvas $B$ of size $W_b \times H_b$ is defined as:$$V = B[y : y + H_v, \; x : x + W_v]$$Where the camera motion bounds are constrained by:$$0 \le x \le W_b - W_v$$$$0 \le y \le H_b - H_v$$Target visibility check inside current viewport $V(x, y)$:$$\text{Visible} = (x \le X_m \le x + W_v) \land (y \le Y_m \le y + H_v)$$Relative coordinates $(x_r, y_r)$ on screen:$$x_r = X_m - x, \quad y_r = Y_m - y$$  Installation & SetupPrerequisitesPython 3.8 or higherOpenCV with GUI/Qt supportGit1. Clone RepositoryBashgit clone [https://github.com/Durga0058/vision-model.git](https://github.com/Durga0058/vision-model.git)
+The viewport crop matrix $V$ of dimension $W_v \times H_v$ at current camera center $(x, y)$ on a panorama base canvas $B$ of size $W_b \times H_b$ is defined as:
+
+$$V = B[y : y + H_v, \; x : x + W_v]$$
+
+Where the camera motion bounds are constrained by:
+
+$$0 \le x \le W_b - W_v$$
+
+$$0 \le y \le H_b - H_v$$
+
+Target visibility check inside current viewport $V(x, y)$:
+
+$$\text{Visible} = (x \le X_m \le x + W_v) \land (y \le Y_m \le y + H_v)$$
+
+Relative coordinates $(x_r, y_r)$ on screen:
+
+$$x_r = X_m - x, \quad y_r = Y_m - y$$
+
+---
+
+## 🛠️ Installation & Setup
+
+### Prerequisites
+
+* Python 3.8 or higher
+* OpenCV with GUI/Qt support
+* Git
+
+### 1. Clone Repository
+
+```bash
+git clone [https://github.com/Durga0058/vision-model.git](https://github.com/Durga0058/vision-model.git)
 cd vision-model
-2. Set Up Virtual Environment (Optional but Recommended)Bashpython3 -m venv venv
+
+```
+
+### 2. Set Up Virtual Environment (Optional but Recommended)
+
+```bash
+python3 -m venv venv
 source venv/bin/activate
-3. Install DependenciesBashpip install -r requirements.txt
-## Configuration (config.yaml)You can tune viewport step sizes, window resolution, and image sources directly via config.yaml:YAMLsimulation:
+
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+
+```
+
+---
+
+##  Configuration (`config.yaml`)
+
+You can tune viewport step sizes, window resolution, and image sources directly via `config.yaml`:
+
+```yaml
+simulation:
   panoramas:
     - "panorama-simulation/panorama-base1.jpg"
     - "panorama-simulation/panorama-base2.jpg"
@@ -58,4 +97,40 @@ randomization:
 target:
   label: "MONKEY"
   marker_color: [0, 0, 255] # Red (BGR)
-## Execution GuideOption A: Direct Python ExecutionBashpython3 dataset_manual.py
+
+```
+
+---
+
+##  Execution Guide
+
+### Option A: Direct Python Execution
+
+```bash
+python3 dataset_manual.py
+
+```
+
+## Keybindings & Controls
+
+When the simulation window pops up, click on the window and use the following keys:
+
+| Key Command | Action / Movement |
+| --- | --- |
+| **`W`** | Pan Viewport **UP** |
+| **`S`** | Pan Viewport **DOWN** |
+| **`A`** | Pan Viewport **LEFT** |
+| **`D`** | Pan Viewport **RIGHT** |
+| **`Q`** | **QUIT** Simulation Environment |
+
+---
+
+##  Troubleshooting
+
+* **Qt / OpenCV Font Warnings:**
+> *`QFontDatabase: Cannot find font directory...`*
+> This is a non-critical system font notice from OpenCV on Linux/Ubuntu. It does not affect simulation rendering or manual control functions.
+
+
+* **Window Freeze / Not Responding:**
+Ensure focus is clicked on the image output window before pressing navigation keys (`W`, `A`, `S`, `D`, `Q`). To force terminate from terminal, press `Ctrl + C`.
