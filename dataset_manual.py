@@ -13,30 +13,41 @@ JSONL_PATH = os.path.join(OUTPUT_DIR, "labels.jsonl")
 META_PATH = os.path.join(OUTPUT_DIR, "meta.json")
 VIDEO_PATH = os.path.join(OUTPUT_DIR, "video.mp4")
 
-# Load Configuration
+# Load Configuration safely
 with open("config.yaml", "r") as f:
-    config = yaml.safe_load(f)
+    config = yaml.safe_load(f) or {}
 
-# Load Panorama Image
-panorama_path = config['simulation']['panoramas'][0]
+# Safely extract values with default fallbacks (Prevents KeyError)
+simulation_cfg = config.get('simulation', {})
+panoramas = simulation_cfg.get('panoramas', ["panorama-base1.jpg"])
+
+panorama_path = panoramas[0] if panoramas else "panorama-base1.jpg"
 panorama = cv2.imread(panorama_path)
+
 if panorama is None:
-    # Fallback if path relative issue
+    # Fallback paths if not found
     panorama = cv2.imread("panorama-simulation/panorama-base1.jpg")
 
+if panorama is None:
+    raise FileNotFoundError("Could not find base panorama image! Please check file path.")
+
 H_b, W_b, _ = panorama.shape
-V_w = config['simulation']['viewport']['width']
-V_h = config['simulation']['viewport']['height']
-step_size = config['simulation']['controls']['step_size']
+
+viewport_cfg = simulation_cfg.get('viewport', {})
+V_w = viewport_cfg.get('width', 600)
+V_h = viewport_cfg.get('height', 400)
+
+controls_cfg = simulation_cfg.get('controls', {})
+step_size = controls_cfg.get('step_size', 30)
 
 # Random Starting Positions
 np.random.seed(int(time.time()))
-x = np.random.randint(0, W_b - V_w)
-y = np.random.randint(0, H_b - V_h)
+x = np.random.randint(0, max(1, W_b - V_w))
+y = np.random.randint(0, max(1, H_b - V_h))
 
 # Random Monkey (Target) Spawn Position
-X_m = np.random.randint(50, W_b - 50)
-Y_m = np.random.randint(50, H_b - 50)
+X_m = np.random.randint(50, max(51, W_b - 50))
+Y_m = np.random.randint(50, max(51, H_b - 50))
 
 # Video Writer Setup
 fps = 30
@@ -68,7 +79,7 @@ while True:
         cv2.putText(viewport, "MONKEY", (rel_x - 25, rel_y - 20),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
 
-    # 3. Calculate Angles (Map X-coordinates to -180° to 180° panorama range)
+    # 3. Calculate Angles
     current_angle = round(((x + V_w / 2) / W_b) * 360.0 - 180.0, 4)
     target_angle = round((X_m / W_b) * 360.0 - 180.0, 4)
     ideal_target_angle = target_angle
