@@ -40,7 +40,7 @@ $$x_r = X_m - x, \quad y_r = Y_m - y$$
 
 ---
 
-## 🛠️ Installation & Setup
+##  Installation & Setup
 
 ### Prerequisites
 
