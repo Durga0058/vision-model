@@ -56,7 +56,7 @@ cd vision-model
 
 ```
 
-### 2. Set Up Virtual Environment (Optional but Recommended)
+### 2. Set Up Virtual Environment
 
 ```bash
 python3 -m venv venv
